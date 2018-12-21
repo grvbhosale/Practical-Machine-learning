@@ -1,0 +1,149 @@
+---
+title: "Practical Machine Learning Project"
+author: "Gaurav Bhosale"
+date: "22 December 2018"
+output: html_document
+---   
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Practical Machine Learning Course Project 
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. 
+
+### Data Sources
+
+The training data for this project is available here:  
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)  
+The test data is available here:  
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)  
+The data for this project comes from this original source: [http://groupware.les.inf.puc-rio.br/har](http://groupware.les.inf.puc-rio.br/har). If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.  
+
+### Procedure
+
+# Load libraries
+```{r}
+library(caret)
+library(rattle)
+library(rpart)
+library(randomForest)
+set.seed(123456)
+```
+
+
+# Load Data
+```{r}
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+training <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+```
+
+
+
+### Cleaning data
+
+In this step, we will clean the dataset and get rid of observations with missing values as well as some meaningless variables.  
+
+
+
+```{r}
+# Checking how much data is missing?
+sum(is.na(training))/(dim(training)[1]*dim(training)[2]) 
+```
+
+```{r}
+# Missing Values fraction by column / variable
+missCol <- apply(training, 2, function(x) sum(is.na(x)/length(x)))  
+
+# Distribution of Missing Variables
+hist(missCol, main = "Missing Data by Variable")
+```
+
+```{r}
+# table(missCol)
+missIndCol <- which(missCol > 0.9); length(missIndCol)  #Number of predictors > 90% missing
+```
+
+Sixty one percent of the total or full data array are missing. One hundred variables had in excess of ninety percent missing data. We removed these latter variables and unneccesary observations such as row nummbers and raw timestamps.
+
+
+## Remove Variables
+
+```{r}
+# Remove Missing Variables from training and test sets
+train.xform.temp <- training[,-missIndCol]
+test.xform.temp  <- testing[, -missIndCol]
+
+# Remove X = row count variable, and raw time stamps
+train.xform  <- train.xform.temp[,-c(1,3,4)]
+test.xform   <- test.xform.temp[,-c(1,3,4)]
+```
+
+```{r}
+# Examine Missing Cases;  All cases are complete
+sum(!complete.cases(train.xform))
+```
+
+
+```{r}
+#Partioning Training data set into two data sets, 60% for myTraining, 40% for myTesting:
+inTrain <- createDataPartition(y=train.xform$classe, p=0.6, list=FALSE)
+myTraining <- train.xform[inTrain, ]; myTesting <- train.xform[-inTrain, ]
+```
+
+```{r}
+#To check the new Nº of observations
+dim(myTesting)
+
+#To check the new Nº of observations
+dim(myTraining)
+```
+### Using ML algorithms for prediction: Random forest
+
+```{r}
+modrf  <- train(classe~., data = myTraining, method = "rf", trControl = trainControl(method = "cv", number = 3, verboseIter = FALSE), na.action = na.pass)
+
+```
+
+
+We fit a Random Forest machine learning model. We used the entire training set and 3-fold cross-validation to find the hyperparameter "mtry" for number of variables for splitting at each node. We used default values for "mtry"
+
+```{r}
+predictionsrf <- predict(modrf, myTesting)
+```
+```{r}
+# Using confusion Matrix to test results:
+confusionMatrix(predictionsrf, myTesting$classe)
+```
+
+
+As you can see random forest with 3 fold cross validation yields a 99.69% accuracy (in sample),so we dnt need to use another model.
+The out of sample error should be greater thus expecting accuracy less that 99.68% when applied to our test set.
+
+### Using on test data
+
+```{r}
+predictionsrftest <- predict(modrf,testing)
+```
+
+```{r}
+#Function to generate files with predictions to submit for assignment:
+write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("Question_no_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+write_files(predictionsrftest)
+```
+
+```{r}
+predictionsrftest
+```
+
+Conclusion - We ran the random forest model with 3 fold cross validation, we expect out of sample error to be greater than our in sample error .
